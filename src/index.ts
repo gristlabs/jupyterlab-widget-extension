@@ -11,6 +11,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
   description: 'Custom Grist widget for a JupyterLite notebook',
   autoStart: true,
   activate: (app: JupyterFrontEnd) => {
+    app.serviceManager.contents.save("test.txt", {content: "hi", format: "text"});
     console.log('JupyterLab extension grist-widget is activated!');
   }
 };
