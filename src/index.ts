@@ -11,42 +11,59 @@ const plugin: JupyterFrontEndPlugin<void> = {
   description: 'Custom Grist widget for a JupyterLite notebook',
   autoStart: true,
   activate: (app: JupyterFrontEnd) => {
-    app.serviceManager.contents.save('notebook.ipynb', {
-      content: {
-        'metadata': {
-          'language_info': {
-            'codemirror_mode': {
+    const script = document.createElement('script');
+    script.src = 'https://docs.getgrist.com/grist-plugin-api.js';
+    script.id = 'grist-plugin-api';
+    script.addEventListener('load', async () => {
+
+      const grist = (window as any).grist;
+
+      app.serviceManager.contents.fileChanged.connect(async (_, change) => {
+        if (change.type === 'save' && change.newValue?.path === 'notebook.ipynb') {
+          grist.setOption('notebook', change.newValue);
+        }
+      });
+
+      grist.ready();
+      const notebook = await grist.getOption('notebook') || {
+        content: {
+          'metadata': {
+            'language_info': {
+              'codemirror_mode': {
+                'name': 'python',
+                'version': 3
+              },
+              'file_extension': '.py',
+              'mimetype': 'text/x-python',
               'name': 'python',
-              'version': 3
+              'nbconvert_exporter': 'python',
+              'pygments_lexer': 'ipython3',
+              'version': '3.11'
             },
-            'file_extension': '.py',
-            'mimetype': 'text/x-python',
-            'name': 'python',
-            'nbconvert_exporter': 'python',
-            'pygments_lexer': 'ipython3',
-            'version': '3.11'
+            'kernelspec': {
+              'name': 'python',
+              'display_name': 'Python (Pyodide)',
+              'language': 'python'
+            }
           },
-          'kernelspec': {
-            'name': 'python',
-            'display_name': 'Python (Pyodide)',
-            'language': 'python'
-          }
+          'nbformat_minor': 4,
+          'nbformat': 4,
+          'cells': [
+            {
+              'cell_type': 'code',
+              'source': '',
+              'metadata': {},
+              'execution_count': null,
+              'outputs': []
+            }
+          ]
         },
-        'nbformat_minor': 4,
-        'nbformat': 4,
-        'cells': [
-          {
-            'cell_type': 'code',
-            'source': '',
-            'metadata': {},
-            'execution_count': null,
-            'outputs': []
-          }
-        ]
-      },
-      format: 'json',
+        format: 'json'
+      };
+      await app.serviceManager.contents.save('notebook.ipynb', notebook);
+      console.log('JupyterLab extension grist-widget is activated!');
     });
-    console.log('JupyterLab extension grist-widget is activated!');
+    document.head.appendChild(script);
   }
 };
 
