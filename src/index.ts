@@ -62,6 +62,36 @@ const plugin: JupyterFrontEndPlugin<void> = {
       };
       await app.serviceManager.contents.save('notebook.ipynb', notebook);
       console.log('JupyterLab extension grist-widget is activated!');
+
+      grist.onRecords(async (records: any) => {
+        const widgets = app.shell.widgets('main');
+        while (true) {
+          const widget = widgets.next();
+          if (!widget) {
+            break;
+          }
+          const kernel = (widget as any).context.sessionContext?.session?.kernel;
+          if (kernel) {
+            const future = kernel.requestExecute({
+              code: `__grist_records__ = ${JSON.stringify(records)}`
+            });
+            let done = false;
+            future.onIOPub = (msg: any) => {
+              console.log({ msg });
+              if (done) {
+                return;
+              }
+              if (
+                msg.header.msg_type === 'status' &&
+                msg.content.execution_state === 'idle'
+              ) {
+                done = true;
+                app.commands.execute('notebook:run-all-cells');
+              }
+            };
+          }
+        }
+      });
     });
     document.head.appendChild(script);
   }
