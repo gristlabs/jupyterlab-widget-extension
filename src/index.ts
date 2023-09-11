@@ -63,38 +63,52 @@ const plugin: JupyterFrontEndPlugin<void> = {
       await app.serviceManager.contents.save('notebook.ipynb', notebook);
       console.log('JupyterLab extension grist-widget is activated!');
 
+      const records = await grist.fetchSelectedTable();
+      await updateRecordsInKernel(app, records, { rerunCells: true });
       grist.onRecords(async (records: any) => {
-        const widgets = app.shell.widgets('main');
-        while (true) {
-          const widget = widgets.next();
-          if (!widget) {
-            break;
-          }
-          const kernel = (widget as any).context.sessionContext?.session?.kernel;
-          if (kernel) {
-            const future = kernel.requestExecute({
-              code: `__grist_records__ = ${JSON.stringify(records)}`
-            });
-            let done = false;
-            future.onIOPub = (msg: any) => {
-              console.log({ msg });
-              if (done) {
-                return;
-              }
-              if (
-                msg.header.msg_type === 'status' &&
-                msg.content.execution_state === 'idle'
-              ) {
-                done = true;
-                app.commands.execute('notebook:run-all-cells');
-              }
-            };
-          }
-        }
+        await updateRecordsInKernel(app, records, { rerunCells: false });
       });
     });
     document.head.appendChild(script);
   }
 };
+
+async function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function updateRecordsInKernel(
+  app: JupyterFrontEnd,
+  records: any,
+  { rerunCells }: { rerunCells: boolean }
+) {
+  while (true) {
+    const widget = app.shell.currentWidget;
+    const kernel = (widget as any)?.context.sessionContext?.session?.kernel;
+    if (!kernel) {
+      await delay(100);
+      continue;
+    }
+    const future = kernel.requestExecute({
+      code: `__grist_records__ = ${JSON.stringify(records)}`
+    });
+    if (rerunCells) {
+      let done = false;
+      future.onIOPub = (msg: any) => {
+        if (done) {
+          return;
+        }
+        if (
+          msg.header.msg_type === 'status' &&
+          msg.content.execution_state === 'idle'
+        ) {
+          done = true;
+          app.commands.execute('notebook:run-all-cells');
+        }
+      };
+    }
+    break;
+  }
+}
 
 export default plugin;
