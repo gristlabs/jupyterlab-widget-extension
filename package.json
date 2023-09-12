@@ -1,16 +1,13 @@
 {
     "name": "grist-widget",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Custom Grist widget for a JupyterLite notebook",
     "keywords": [
         "jupyter",
         "jupyterlab",
         "jupyterlab-extension"
     ],
-    "homepage": "",
-    "bugs": {
-        "url": "/issues"
-    },
+    "homepage": "https://github.com/gristlabs/jupyterlab-widget-extension",
     "license": "BSD-3-Clause",
     "author": {
         "name": "Alex Hall",
@@ -23,10 +20,6 @@
     "main": "lib/index.js",
     "types": "lib/index.d.ts",
     "style": "style/index.css",
-    "repository": {
-        "type": "git",
-        "url": ".git"
-    },
     "scripts": {
         "build": "jlpm build:lib && jlpm build:labextension:dev",
         "build:prod": "jlpm clean && jlpm build:lib:prod && jlpm build:labextension",
