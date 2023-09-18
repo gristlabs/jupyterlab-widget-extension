@@ -21,6 +21,42 @@ class MyWorker extends Worker {
 
 window.Worker = MyWorker;
 
+const emptyNotebook = {
+  content: {
+    'metadata': {
+      'language_info': {
+        'codemirror_mode': {
+          'name': 'python',
+          'version': 3
+        },
+        'file_extension': '.py',
+        'mimetype': 'text/x-python',
+        'name': 'python',
+        'nbconvert_exporter': 'python',
+        'pygments_lexer': 'ipython3',
+        'version': '3.11'
+      },
+      'kernelspec': {
+        'name': 'python',
+        'display_name': 'Python (Pyodide)',
+        'language': 'python'
+      }
+    },
+    'nbformat_minor': 4,
+    'nbformat': 4,
+    'cells': [
+      {
+        'cell_type': 'code',
+        'source': '',
+        'metadata': {},
+        'execution_count': null,
+        'outputs': []
+      }
+    ]
+  },
+  format: 'json' as const,
+};
+
 /**
  * Initialization data for the grist-widget extension.
  */
@@ -29,6 +65,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
   description: 'Custom Grist widget for a JupyterLite notebook',
   autoStart: true,
   activate: (app: JupyterFrontEnd) => {
+    // Make sure there's a notebook file so it doesn't give a 404 error
+    // if the grist plugin loads too slowly.
+    app.serviceManager.contents.save('notebook.ipynb', emptyNotebook);
+
+    hideBars(app).catch(e => console.error(e));
+
     const script = document.createElement('script');
     script.src = 'https://docs.getgrist.com/grist-plugin-api.js';
     script.id = 'grist-plugin-api';
@@ -43,42 +85,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
       });
 
       grist.ready();
-      const notebook = await grist.getOption('notebook') || {
-        content: {
-          'metadata': {
-            'language_info': {
-              'codemirror_mode': {
-                'name': 'python',
-                'version': 3
-              },
-              'file_extension': '.py',
-              'mimetype': 'text/x-python',
-              'name': 'python',
-              'nbconvert_exporter': 'python',
-              'pygments_lexer': 'ipython3',
-              'version': '3.11'
-            },
-            'kernelspec': {
-              'name': 'python',
-              'display_name': 'Python (Pyodide)',
-              'language': 'python'
-            }
-          },
-          'nbformat_minor': 4,
-          'nbformat': 4,
-          'cells': [
-            {
-              'cell_type': 'code',
-              'source': '',
-              'metadata': {},
-              'execution_count': null,
-              'outputs': []
-            }
-          ]
-        },
-        format: 'json'
-      };
-      await app.serviceManager.contents.save('notebook.ipynb', notebook);
+      const notebook = await grist.getOption('notebook');
+      if (notebook) {
+        await app.serviceManager.contents.save('notebook.ipynb', notebook);
+        // Immediately reload the notebook file, otherwise it will show a dialog
+        // asking the user if they want to reload the file.
+        await app.commands.execute('docmanager:reload');
+      }
+
       console.log('JupyterLab extension grist-widget is activated!');
 
       const kernel = await getKernel(app);
@@ -144,6 +158,25 @@ async function updateRecordsInKernel(
         app.commands.execute('notebook:run-all-cells');
       }
     };
+  }
+}
+
+async function hideBars(app: JupyterFrontEnd) {
+  while (!app.shell.currentWidget) {
+    await delay(100);
+  }
+  const shell = app.shell as any;
+  shell.collapseLeft();
+  shell._titleHandler.parent.setHidden(true);
+  shell._leftHandler.sideBar.setHidden(true);
+  for (let i = 0; i < 1000; i++) {
+    if (!shell.leftCollapsed) {
+      shell.collapseLeft();
+      shell._leftHandler.sideBar.setHidden(true);
+      break;
+    } else {
+      await delay(10);
+    }
   }
 }
 
