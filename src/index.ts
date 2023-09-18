@@ -102,11 +102,12 @@ async function delay(ms: number): Promise<void> {
 }
 
 function exposeWorker(worker: Worker, grist: any) {
-  grist = {
-    ...grist,
-    getTable: (tableId: string) => Comlink.proxy(grist.getTable(tableId))
-  };
-  Comlink.expose({ grist }, worker);
+  Comlink.expose({
+    grist: {
+      ...grist,
+      getTable: (tableId: string) => Comlink.proxy(grist.getTable(tableId))
+    }
+  }, worker);
 }
 
 async function getKernel(app: JupyterFrontEnd) {
