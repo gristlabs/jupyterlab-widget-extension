@@ -6,11 +6,12 @@ def __make_grist_api():
     import pyodide_js
 
     class ComlinkProxy:
-        def __init__(self, proxy):
-            self.proxy = proxy
+        def __init__(self, proxy, name=None):
+            self._proxy = proxy
+            self._name = name
 
         def __getattr__(self, name):
-            return ComlinkProxy(getattr(self.proxy, name))
+            return ComlinkProxy(getattr(self._proxy, name), name)
 
         async def __call__(self, *args, **kwargs):
             args = [
@@ -21,8 +22,10 @@ def __make_grist_api():
                 key: to_js(value, dict_converter=js.Object.fromEntries)
                 for key, value in kwargs.items()
             }
-            result = await self.proxy(*args, **kwargs)
-            if hasattr(result, "to_py"):
+            result = await self._proxy(*args, **kwargs)
+            if self._name == "getTable":
+                result = ComlinkProxy(result)
+            elif hasattr(result, "to_py"):
                 result = result.to_py()
             return result
 
