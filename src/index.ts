@@ -82,7 +82,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       console.log('JupyterLab extension grist-widget is activated!');
 
       const kernel = await getKernel(app);
-      kernel.requestExecute({ initKernelPy });
+      kernel.requestExecute({ code: initKernelPy });
 
       for (const worker of pendingWorkers) {
         exposeWorker(worker, grist);
@@ -106,7 +106,7 @@ function exposeWorker(worker: Worker, grist: any) {
     ...grist,
     getTable: (tableId: string) => Comlink.proxy(grist.getTable(tableId))
   };
-  Comlink.expose(grist, worker);
+  Comlink.expose({ grist }, worker);
 }
 
 async function getKernel(app: JupyterFrontEnd) {
