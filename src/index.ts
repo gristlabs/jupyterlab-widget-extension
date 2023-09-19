@@ -4,6 +4,7 @@ import {
 } from '@jupyterlab/application';
 import * as Comlink from 'comlink';
 import initKernelPy from './initKernelPy';
+import { IDocumentManager } from '@jupyterlab/docmanager';
 
 const pendingWorkers: MyWorker[] = [];
 
@@ -64,6 +65,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
   id: 'grist-widget:plugin',
   description: 'Custom Grist widget for a JupyterLite notebook',
   autoStart: true,
+  requires: [IDocumentManager],
   activate: (app: JupyterFrontEnd) => {
     // Make sure there's a notebook file so it doesn't give a 404 error
     // if the grist plugin loads too slowly.
