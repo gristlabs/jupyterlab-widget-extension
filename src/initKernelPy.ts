@@ -1,7 +1,7 @@
 // language=Python
 const code = `
 def __make_grist_api():
-    from pyodide.ffi import to_js
+    from pyodide.ffi import to_js, create_proxy
     import js
     import pyodide_js
 
@@ -14,15 +14,30 @@ def __make_grist_api():
             return ComlinkProxy(getattr(self._proxy, name), name)
 
         async def __call__(self, *args, **kwargs):
-            args = [
-                to_js(arg, dict_converter=js.Object.fromEntries)
-                for arg in args
-            ]
-            kwargs = {
-                key: to_js(value, dict_converter=js.Object.fromEntries)
-                for key, value in kwargs.items()
-            }
-            result = await self._proxy(*args, **kwargs)
+            if any(callable(arg) for arg in args):
+                assert len(args) == 1 and not kwargs, "Only one callable argument is supported"
+
+                def wrapper(*callback_args):
+                    callback_args = [
+                        a.to_py() if hasattr(a, "to_py") else a
+                        for a in callback_args
+                    ]
+                    return args[0](*callback_args)
+
+                js._grist_tmp1 = self._proxy
+                js._grist_tmp2 = js.Comlink.proxy(create_proxy(wrapper))
+                result = await js.eval("_grist_tmp1(_grist_tmp2)")
+            else:
+                args = [
+                    to_js(arg, dict_converter=js.Object.fromEntries)
+                    for arg in args
+                ]
+                kwargs = {
+                    key: to_js(value, dict_converter=js.Object.fromEntries)
+                    for key, value in kwargs.items()
+                }
+                result = await self._proxy(*args, **kwargs)
+
             if self._name == "getTable":
                 result = ComlinkProxy(result)
             elif hasattr(result, "to_py"):
