@@ -1,10 +1,7 @@
-import {
-  JupyterFrontEnd,
-  JupyterFrontEndPlugin
-} from '@jupyterlab/application';
+import { JupyterFrontEnd, JupyterFrontEndPlugin } from '@jupyterlab/application';
 import * as Comlink from 'comlink';
 import initKernelPy from './initKernelPy';
-import { IDocumentManager } from '@jupyterlab/docmanager';
+import { IFileBrowserCommands } from '@jupyterlab/filebrowser';
 
 const pendingWorkers: MyWorker[] = [];
 
@@ -65,19 +62,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
   id: 'grist-widget:plugin',
   description: 'Custom Grist widget for a JupyterLite notebook',
   autoStart: true,
-  requires: [IDocumentManager],
+  requires: [IFileBrowserCommands],
   activate: (app: JupyterFrontEnd) => {
-    // Make sure there's a notebook file so it doesn't give a 404 error
-    // if the grist plugin loads too slowly.
-    app.serviceManager.contents.save('notebook.ipynb', emptyNotebook);
-
     hideBars(app).catch(e => console.error(e));
 
     const script = document.createElement('script');
     script.src = 'https://docs.getgrist.com/grist-plugin-api.js';
     script.id = 'grist-plugin-api';
     script.addEventListener('load', async () => {
-
       const grist = (window as any).grist;
 
       app.serviceManager.contents.fileChanged.connect(async (_, change) => {
@@ -87,13 +79,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
       });
 
       grist.ready();
-      const notebook = await grist.getOption('notebook');
-      if (notebook) {
-        await app.serviceManager.contents.save('notebook.ipynb', notebook);
-        // Immediately reload the notebook file, otherwise it will show a dialog
-        // asking the user if they want to reload the file.
-        await app.commands.execute('docmanager:reload');
-      }
+
+      const notebook = await grist.getOption('notebook') || emptyNotebook;
+      await app.serviceManager.contents.save('notebook.ipynb', notebook);
+      await app.commands.execute('filebrowser:open-path', { path: 'notebook.ipynb' });
 
       console.log('JupyterLab extension grist-widget is activated!');
 
