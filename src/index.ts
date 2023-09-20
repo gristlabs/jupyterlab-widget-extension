@@ -118,7 +118,7 @@ function exposeWorker(worker: Worker, grist: any) {
 async function getKernel(app: JupyterFrontEnd) {
   while (true) {
     const widget = app.shell.currentWidget;
-    const kernel = (widget as any)?.context.sessionContext?.session?.kernel;
+    const kernel = (widget as any)?.context?.sessionContext?.session?.kernel;
     if (kernel) {
       return kernel;
     }
