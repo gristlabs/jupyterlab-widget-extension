@@ -4,6 +4,19 @@ def __make_grist_api():
     from pyodide.ffi import to_js, create_proxy
     import js
     import pyodide_js
+    import inspect
+    import functools
+    import asyncio
+    
+    async def maybe_await(value):
+        while inspect.isawaitable(value):
+            value = await value
+        return value
+    
+    def run_async(coro):
+        if inspect.iscoroutinefunction(coro):
+            coro = coro()
+        asyncio.get_running_loop().run_until_complete(coro)
 
     class ComlinkProxy:
         def __init__(self, proxy, name=None):
@@ -15,25 +28,14 @@ def __make_grist_api():
 
         async def __call__(self, *args, **kwargs):
             if any(callable(arg) for arg in args):
-                assert len(args) == 1 and not kwargs, "Only one callable argument is supported"
+                assert len(args) == 1 and not kwargs, "Only one argument is supported for callbacks"
                 [callback] = args
-                name = self._name
                 async def wrapper(*callback_args):
                     callback_args = [
                         a.to_py() if hasattr(a, "to_py") else a
                         for a in callback_args
                     ]
-                    if name == 'onRecord':
-                        record, *rest = callback_args
-                        if record:
-                            record = await grist.fetchSelectedRecord(record['id'], keepEncoded=True)
-                        callback(record, *rest)
-                    elif name == 'onRecords':
-                        _, *rest = callback_args
-                        records = await grist.fetchSelectedTable(keepEncoded=True)
-                        callback(records, *rest)                    
-                    else:
-                        callback(*callback_args)
+                    await maybe_await(callback(*callback_args))
 
                 js._grist_tmp1 = self._proxy
                 js._grist_tmp2 = js.Comlink.proxy(create_proxy(wrapper))
@@ -57,7 +59,44 @@ def __make_grist_api():
 
     js.importScripts("https://unpkg.com/comlink@4.4.1/dist/umd/comlink.js")
     pyodide_js.registerComlink(js.Comlink)
-    return ComlinkProxy(js.Comlink.wrap(js).grist)
+    
+    def auto_display():
+        handle = display(display_id=True)
+        return handle.update
+    
+    class Grist:
+        def __init__(self):
+            self.raw = ComlinkProxy(js.Comlink.wrap(js).grist)
+        
+        def on_records(self, callback):
+            disp = auto_display()
+
+            @functools.wraps(callback)
+            async def wrapper(_, *rest):
+                records = await self.raw.fetchSelectedTable(keepEncoded=True)
+                await maybe_await(callback(disp, records, *rest))
+            
+            @run_async
+            async def run():
+                await wrapper(None)
+                await self.raw.onRecords(wrapper)
+    
+        def on_record(self, callback):
+            disp = auto_display()
+
+            @functools.wraps(callback)
+            async def wrapper(record, *rest):
+                if record:
+                    record = await self.raw.fetchSelectedRecord(record['id'], keepEncoded=True)
+                    await maybe_await(callback(disp, record, *rest))
+            
+            @run_async
+            async def run():
+                await wrapper(await self.raw.getCurrentRecord())
+                await self.raw.onRecord(wrapper)
+    
+    
+    return Grist() 
 
 
 grist = __make_grist_api()

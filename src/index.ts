@@ -55,6 +55,8 @@ const emptyNotebook = {
   format: 'json' as const,
 };
 
+let currentRecord: any = null;
+
 /**
  * Initialization data for the grist-widget extension.
  */
@@ -76,6 +78,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
         if (change.type === 'save' && change.newValue?.path === 'notebook.ipynb') {
           grist.setOption('notebook', change.newValue);
         }
+      });
+
+      grist.onRecord((record: any) => {
+        currentRecord = record;
       });
 
       grist.ready();
@@ -110,7 +116,8 @@ function exposeWorker(worker: Worker, grist: any) {
   Comlink.expose({
     grist: {
       ...grist,
-      getTable: (tableId: string) => Comlink.proxy(grist.getTable(tableId))
+      getTable: (tableId: string) => Comlink.proxy(grist.getTable(tableId)),
+      getCurrentRecord: () => currentRecord,
     }
   }, worker);
 }
