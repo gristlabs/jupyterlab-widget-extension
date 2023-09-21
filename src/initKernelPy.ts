@@ -5,7 +5,7 @@ def __make_grist_api():
     import js
     import pyodide_js
     import inspect
-    import functools
+    import traceback
     import asyncio
     
     async def maybe_await(value):
@@ -60,8 +60,12 @@ def __make_grist_api():
     js.importScripts("https://unpkg.com/comlink@4.4.1/dist/umd/comlink.js")
     pyodide_js.registerComlink(js.Comlink)
     
+    get_ipython().display_formatter.formatters['text/plain'].for_type(
+        str, lambda string, pp, cycle: pp.text(string)
+    )
+    
     def auto_display():
-        handles = [display(display_id=True) for _ in range(50)]
+        handles = [display(display_id=True) for _ in range(45)]
         
         def start():
             for handle in handles:
@@ -70,7 +74,8 @@ def __make_grist_api():
             i = 0
             def disp(obj):
                 nonlocal i
-                # TODO handle too many
+                # if i == len(handles) - 1:
+                #     raise RuntimeError("Too many display calls")
                 handles[i].update(obj)
                 i += 1
             return disp
@@ -79,7 +84,11 @@ def __make_grist_api():
     def wrap_with_display(wrapper):
         disp_start = auto_display()
         async def inner_wrapper(*args):
-            await maybe_await(wrapper(disp_start(), *args))
+            displayer = disp_start()
+            try:
+                await maybe_await(wrapper(displayer, *args))
+            except Exception:
+                displayer(traceback.format_exc())
         return inner_wrapper
 
     class Grist:
