@@ -76,21 +76,18 @@ def __make_grist_api():
             return disp
         return start
     
-    def wrap_with_display(callback):
-        def decorator(wrapper):
-            disp_start = auto_display()
-            @functools.wraps(callback)
-            async def inner_wrapper(*args):
-                await maybe_await(wrapper(disp_start(), *args))
-            return inner_wrapper
-        return decorator
+    def wrap_with_display(wrapper):
+        disp_start = auto_display()
+        async def inner_wrapper(*args):
+            await maybe_await(wrapper(disp_start(), *args))
+        return inner_wrapper
 
     class Grist:
         def __init__(self):
             self.raw = ComlinkProxy(js.Comlink.wrap(js).grist)
         
         def on_records(self, callback):
-            @wrap_with_display(callback)
+            @wrap_with_display
             async def wrapper(displayer, _, *rest):
                 records = await self.raw.fetchSelectedTable(keepEncoded=True)
                 return callback(displayer, records, *rest)
@@ -101,7 +98,7 @@ def __make_grist_api():
                 await self.raw.onRecords(wrapper)
     
         def on_record(self, callback):
-            @wrap_with_display(callback)
+            @wrap_with_display
             async def wrapper(displayer, record, *rest):
                 if record:
                     record = await self.raw.fetchSelectedRecord(record['id'], keepEncoded=True)
