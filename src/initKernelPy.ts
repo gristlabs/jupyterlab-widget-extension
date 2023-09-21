@@ -87,9 +87,22 @@ def __make_grist_api():
             displayer = disp_start()
             try:
                 await maybe_await(wrapper(displayer, *args))
-            except Exception:
-                displayer(traceback.format_exc())
+            except Exception as e:
+                displayer("".join(traceback.format_exception(
+                    e.__class__, e, skip_traceback_internals(e.__traceback__)
+                )))
+                
         return inner_wrapper
+
+    def skip_traceback_internals(tb):
+        filename = (lambda: 0).__code__.co_filename
+        original = tb
+        while tb and tb.tb_frame.f_code.co_filename == filename:
+            tb = tb.tb_next
+        if tb:
+            return tb
+        else:
+            return original
 
     class Grist:
         def __init__(self):
