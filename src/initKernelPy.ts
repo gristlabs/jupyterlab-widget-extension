@@ -61,20 +61,32 @@ def __make_grist_api():
     pyodide_js.registerComlink(js.Comlink)
     
     def auto_display():
-        handle = display(display_id=True)
-        return handle.update
+        handles = [display(display_id=True) for _ in range(50)]
+        
+        def start():
+            for handle in handles:
+                handle.update({}, raw=True)
+
+            i = 0
+            def disp(obj):
+                nonlocal i
+                # TODO handle too many
+                handles[i].update(obj)
+                i += 1
+            return disp
+        return start
     
     class Grist:
         def __init__(self):
             self.raw = ComlinkProxy(js.Comlink.wrap(js).grist)
         
         def on_records(self, callback):
-            disp = auto_display()
+            disp_start = auto_display()
 
             @functools.wraps(callback)
             async def wrapper(_, *rest):
                 records = await self.raw.fetchSelectedTable(keepEncoded=True)
-                await maybe_await(callback(disp, records, *rest))
+                await maybe_await(callback(disp_start(), records, *rest))
             
             @run_async
             async def run():
@@ -82,13 +94,13 @@ def __make_grist_api():
                 await self.raw.onRecords(wrapper)
     
         def on_record(self, callback):
-            disp = auto_display()
+            disp_start = auto_display()
 
             @functools.wraps(callback)
             async def wrapper(record, *rest):
                 if record:
                     record = await self.raw.fetchSelectedRecord(record['id'], keepEncoded=True)
-                    await maybe_await(callback(disp, record, *rest))
+                    await maybe_await(callback(disp_start(), record, *rest))
             
             @run_async
             async def run():
