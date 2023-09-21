@@ -74,10 +74,11 @@ def __make_grist_api():
             i = 0
             def disp(obj):
                 nonlocal i
-                # if i == len(handles) - 1:
-                #     raise RuntimeError("Too many display calls")
-                handles[i].update(obj)
-                i += 1
+                if i == len(handles) - 1:
+                    handles[i].update("Too many display calls!")
+                else:
+                    handles[i].update(obj)
+                    i += 1
             return disp
         return start
     
