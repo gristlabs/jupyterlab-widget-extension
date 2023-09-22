@@ -98,11 +98,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
       for (const worker of pendingWorkers) {
         exposeWorker(worker, grist);
       }
-      const records = await grist.fetchSelectedTable();
-      await updateRecordsInKernel(app, records, { rerunCells: true });
-      grist.onRecords(async (records: any) => {
-        await updateRecordsInKernel(app, records, { rerunCells: false });
-      });
+
+      await app.commands.execute('notebook:run-all-cells');
     });
     document.head.appendChild(script);
   }
@@ -130,32 +127,6 @@ async function getKernel(app: JupyterFrontEnd) {
       return kernel;
     }
     await delay(100);
-  }
-}
-
-async function updateRecordsInKernel(
-  app: JupyterFrontEnd,
-  records: any,
-  { rerunCells }: { rerunCells: boolean }
-) {
-  const kernel = await getKernel(app);
-  const future = kernel.requestExecute({
-    code: `__grist_records__ = ${JSON.stringify(records)}`
-  });
-  if (rerunCells) {
-    let done = false;
-    future.onIOPub = (msg: any) => {
-      if (done) {
-        return;
-      }
-      if (
-        msg.header.msg_type === 'status' &&
-        msg.content.execution_state === 'idle'
-      ) {
-        done = true;
-        app.commands.execute('notebook:run-all-cells');
-      }
-    };
   }
 }
 
