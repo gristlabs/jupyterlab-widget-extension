@@ -76,7 +76,17 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
       app.serviceManager.contents.fileChanged.connect(async (_, change) => {
         if (change.type === 'save' && change.newValue?.path === 'notebook.ipynb') {
-          grist.setOption('notebook', change.newValue);
+          const withoutOutputs = {
+            ...change.newValue,
+            content: {
+              ...change.newValue.content,
+              cells: change.newValue.content.cells.map((cell: any) => ({
+                ...cell,
+                outputs: 'outputs' in cell ? [] : undefined,
+              })),
+            },
+          };
+          grist.setOption('notebook', withoutOutputs);
         }
       });
 
