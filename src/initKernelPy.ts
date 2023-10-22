@@ -72,6 +72,8 @@ def __make_grist_api():
         str, lambda string, pp, cycle: pp.text(string)
     )
     
+    lock = asyncio.Lock()
+
     def wrap_with_display(wrapper):
         handles = [original_display(display_id=True) for _ in range(45)]
         
@@ -108,28 +110,29 @@ def __make_grist_api():
                 else:
                     displayer(sep.join(map(str, print_args)) + end)
 
-            builtins.print = new_print
-            patched_modules = []
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                for module in list(sys.modules.values()):
-                    try:
-                        if module != IPython.core.display_functions and getattr(module, "display", "") == original_display:
-                            module.display = displayer
-                            patched_modules.append(module)
-                    except:
-                        pass
-
-            try:
-                await wrapper(*args)
-            except Exception as e:
-                displayer("".join(traceback.format_exception(
-                    e.__class__, e, skip_traceback_internals(e.__traceback__)
-                )))
-            finally:
-                builtins.print = original_print
-                for module in patched_modules:
-                    module.display = original_display
+            async with lock:
+              builtins.print = new_print
+              patched_modules = []
+              with warnings.catch_warnings():
+                  warnings.simplefilter("ignore")
+                  for module in list(sys.modules.values()):
+                      try:
+                          if module != IPython.core.display_functions and getattr(module, "display", "") == original_display:
+                              module.display = displayer
+                              patched_modules.append(module)
+                      except:
+                          pass
+  
+              try:
+                  await wrapper(*args)
+              except Exception as e:
+                  displayer("".join(traceback.format_exception(
+                      e.__class__, e, skip_traceback_internals(e.__traceback__)
+                  )))
+              finally:
+                  builtins.print = original_print
+                  for module in patched_modules:
+                      module.display = original_display
                 
         return inner_wrapper
 
