@@ -154,8 +154,26 @@ def __make_grist_api():
         for callback in callback_registry['onRecord'].values():
             await callback(record)
     
+    last_registering_cell_filename = None
+
+    def check_registering_cell():
+        nonlocal last_registering_cell_filename
+        frame = inspect.currentframe().f_back
+        while True:
+            code = frame.f_code
+            if code.co_filename == last_registering_cell_filename:
+                raise Exception("Only one callback can be registered per cell.")
+            if code.co_name == "<module>" and code.co_filename.startswith("<ipython-input-"):
+                last_registering_cell_filename = code.co_filename
+                break
+            frame = frame.f_back
+
     async def add_to_callback_registry(name, callback):
         registry = callback_registry[name]
+        if callback.__name__ in registry:
+            print(f"A callback named {callback.__name__} has already been registered, so I'm assuming "
+                  "you want to replace it. If not, please rename the function.\\n")
+        wrapped = wrap_with_display(callback)
         if not registry:
             dispatch = dict(
                 onRecords=on_records_dispatch,
@@ -163,10 +181,6 @@ def __make_grist_api():
             )[name]
             method = getattr(grist.raw, name)
             await method(dispatch)
-        if callback.__name__ in registry:
-            print(f"A callback named {callback.__name__} has already been registered, so I'm assuming "
-                  "you want to replace it. If not, please rename the function.\\n")
-        wrapped = wrap_with_display(callback)
         registry[callback.__name__] = wrapped
         return wrapped
             
@@ -185,12 +199,14 @@ def __make_grist_api():
             self.raw = ComlinkProxy(js.Comlink.wrap(js).grist)
         
         def on_records(self, callback):
+            check_registering_cell()
             @run_async
             async def run():
                 wrapper = await add_to_callback_registry('onRecords', callback)
                 await wrapper(None)
     
         def on_record(self, callback):
+            check_registering_cell()
             @run_async
             async def run():
                 wrapper = await add_to_callback_registry('onRecord', callback)
