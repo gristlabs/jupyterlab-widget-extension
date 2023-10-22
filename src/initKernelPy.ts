@@ -7,6 +7,14 @@ def __make_grist_api():
     import inspect
     import traceback
     import asyncio
+    import IPython.display
+    import IPython.core.display_functions
+    import sys
+    import warnings
+    import builtins
+    
+    original_print = print
+    original_display = display
     
     async def maybe_await(value):
         while inspect.isawaitable(value):
@@ -64,34 +72,64 @@ def __make_grist_api():
         str, lambda string, pp, cycle: pp.text(string)
     )
     
-    def auto_display():
-        handles = [display(display_id=True) for _ in range(45)]
+    def wrap_with_display(wrapper):
+        handles = [original_display(display_id=True) for _ in range(45)]
         
-        def start():
+        def in_wrapper_frame():
+            frame = inspect.currentframe().f_back
+            while frame:
+                if frame.f_code == inner_wrapper.__code__:
+                    return True
+                frame = frame.f_back
+
+        async def inner_wrapper(*args):
             for handle in handles:
                 handle.update({}, raw=True)
 
             i = 0
-            def disp(obj):
+            def displayer(*objs, **kwargs):
                 nonlocal i
-                if i == len(handles) - 1:
-                    handles[i].update("Too many display calls!")
+                if not in_wrapper_frame():
+                    return original_display(*objs, **kwargs)
+
+                for obj in objs:
+                  if i == len(handles) - 1:
+                      handles[i].update("Too many display calls!")
+                  else:
+                      handles[i].update(obj, **kwargs)
+                      i += 1
+            
+            def new_print(*print_args, sep=' ', end='\\n', **kwargs):
+                if not in_wrapper_frame():
+                    return original_print(*print_args, sep=sep, end=end, **kwargs)
+
+                if len(print_args) == 1 and end == '\\n':
+                    displayer(print_args[0])
                 else:
-                    handles[i].update(obj)
-                    i += 1
-            return disp
-        return start
-    
-    def wrap_with_display(wrapper):
-        disp_start = auto_display()
-        async def inner_wrapper(*args):
-            displayer = disp_start()
+                    displayer(sep.join(map(str, print_args)) + end)
+
+            builtins.print = new_print
+            patched_modules = []
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                for module in list(sys.modules.values()):
+                    try:
+                        if module != IPython.core.display_functions and getattr(module, "display", "") == original_display:
+                            module.display = displayer
+                            patched_modules.append(module)
+                    except:
+                        pass
+
             try:
-                await maybe_await(wrapper(displayer, *args))
+                await wrapper(*args)
             except Exception as e:
                 displayer("".join(traceback.format_exception(
                     e.__class__, e, skip_traceback_internals(e.__traceback__)
                 )))
+            finally:
+                builtins.print = original_print
+                for module in patched_modules:
+                    module.display = original_display
                 
         return inner_wrapper
 
@@ -111,9 +149,9 @@ def __make_grist_api():
         
         def on_records(self, callback):
             @wrap_with_display
-            async def wrapper(displayer, _, *_rest):
+            async def wrapper(_, *_rest):
                 records = await self.raw.fetchSelectedTable(keepEncoded=True)
-                return callback(displayer, records)
+                await maybe_await(callback(records))
 
             @run_async
             async def run():
@@ -122,10 +160,10 @@ def __make_grist_api():
     
         def on_record(self, callback):
             @wrap_with_display
-            async def wrapper(displayer, record, *_rest):
+            async def wrapper(record, *_rest):
                 if record:
                     record = await self.raw.fetchSelectedRecord(record['id'], keepEncoded=True)
-                    return callback(displayer, record)
+                    await maybe_await(callback(record))
             
             @run_async
             async def run():
