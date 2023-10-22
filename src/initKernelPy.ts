@@ -74,7 +74,7 @@ def __make_grist_api():
     
     lock = asyncio.Lock()
 
-    def wrap_with_display(wrapper):
+    def wrap_with_display(func):
         handles = [original_display(display_id=True) for _ in range(45)]
         
         def in_wrapper_frame():
@@ -124,7 +124,7 @@ def __make_grist_api():
                           pass
   
               try:
-                  await wrapper(*args)
+                  await maybe_await(func(*args))
               except Exception as e:
                   displayer("".join(traceback.format_exception(
                       e.__class__, e, skip_traceback_internals(e.__traceback__)
@@ -136,6 +136,40 @@ def __make_grist_api():
                 
         return inner_wrapper
 
+    callback_registry = dict(
+        onRecords={},
+        onRecord={},
+    )
+    
+    async def on_records_dispatch(*_):
+        records = await grist.raw.fetchSelectedTable(keepEncoded=True)
+        for callback in callback_registry['onRecords'].values():
+            await callback(records)
+    
+    async def on_record_dispatch(record, *_rest):
+        if not record:
+            return
+        
+        record = await grist.raw.fetchSelectedRecord(record['id'], keepEncoded=True)
+        for callback in callback_registry['onRecord'].values():
+            await callback(record)
+    
+    async def add_to_callback_registry(name, callback):
+        registry = callback_registry[name]
+        if not registry:
+            dispatch = dict(
+                onRecords=on_records_dispatch,
+                onRecord=on_record_dispatch,
+            )[name]
+            method = getattr(grist.raw, name)
+            await method(dispatch)
+        if callback.__name__ in registry:
+            print(f"A callback named {callback.__name__} has already been registered, so I'm assuming "
+                  "you want to replace it. If not, please rename the function.\\n")
+        wrapped = wrap_with_display(callback)
+        registry[callback.__name__] = wrapped
+        return wrapped
+            
     def skip_traceback_internals(tb):
         filename = (lambda: 0).__code__.co_filename
         original = tb
@@ -151,28 +185,16 @@ def __make_grist_api():
             self.raw = ComlinkProxy(js.Comlink.wrap(js).grist)
         
         def on_records(self, callback):
-            @wrap_with_display
-            async def wrapper(_, *_rest):
-                records = await self.raw.fetchSelectedTable(keepEncoded=True)
-                await maybe_await(callback(records))
-
             @run_async
             async def run():
+                wrapper = await add_to_callback_registry('onRecords', callback)
                 await wrapper(None)
-                await self.raw.onRecords(wrapper)
     
         def on_record(self, callback):
-            @wrap_with_display
-            async def wrapper(record, *_rest):
-                if record:
-                    record = await self.raw.fetchSelectedRecord(record['id'], keepEncoded=True)
-                    await maybe_await(callback(record))
-            
             @run_async
             async def run():
+                wrapper = await add_to_callback_registry('onRecord', callback)
                 await wrapper(await self.raw.getCurrentRecord())
-                await self.raw.onRecord(wrapper)
-    
     
     return Grist() 
 
