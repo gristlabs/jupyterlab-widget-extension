@@ -111,9 +111,9 @@ def __make_grist_api():
         
         def on_records(self, callback):
             @wrap_with_display
-            async def wrapper(displayer, _, *rest):
+            async def wrapper(displayer, _, *_rest):
                 records = await self.raw.fetchSelectedTable(keepEncoded=True)
-                return callback(displayer, records, *rest)
+                return callback(displayer, records)
 
             @run_async
             async def run():
@@ -122,10 +122,10 @@ def __make_grist_api():
     
         def on_record(self, callback):
             @wrap_with_display
-            async def wrapper(displayer, record, *rest):
+            async def wrapper(displayer, record, *_rest):
                 if record:
                     record = await self.raw.fetchSelectedRecord(record['id'], keepEncoded=True)
-                    return callback(displayer, record, *rest)
+                    return callback(displayer, record)
             
             @run_async
             async def run():
