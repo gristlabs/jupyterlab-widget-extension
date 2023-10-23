@@ -10,8 +10,8 @@ async def __bootstrap_grist():
     with tarfile.open(fileobj=bytes_file) as tar:
         tar.extractall()
     
-    import grist  # noqa
-    return grist.grist
+    import grist.browser  # noqa
+    return grist.browser.grist
 
 grist = await __bootstrap_grist()
 `;
