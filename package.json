@@ -1,6 +1,6 @@
 {
     "name": "grist-widget",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "description": "Custom Grist widget for a JupyterLite notebook",
     "keywords": [
         "jupyter",
